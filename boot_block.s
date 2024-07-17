@@ -17,10 +17,7 @@
     .short 0xa002
 .endm
 
-.equ inode_size, 256 /* the size of the inodes that the filesystem will use. 128 and 256 byte inode sizes are tested and confirmed working */
 .equ block_group_size, 32
-
-.equ kernel_addr, 0x1000 /* the address that the kernel will be loaded at if it's not an ELF binary */
 
 .equ elf_magic, 0x7f454c46 /* ELF magic number */
 .equ pt_load, 1 /* id of the loadable program header type */
@@ -61,11 +58,12 @@ start:
 
     /* check its magic number */
     cmpw #0x53ef, 56(%a1) /* s_magic */
-    beq 1f
-    movel #bad_magic_number, %d0
+    beq correct_magic_number
+    movew #bad_magic_number, %d0
     _SysError
 
-1:  /* read fields from the superblock */
+correct_magic_number:
+    /* read fields from the superblock */
     movel 24(%a1), %d0 /* s_log_block_size */
     bsr reverse_word
     movel #1024, %d1
@@ -84,6 +82,19 @@ start:
     lea bg_inodes, %a2
     movel %d0, (%a2)
 
+    movel 76(%a1), %d0 /* s_rev_level */
+    bsr reverse_word
+    cmpl #0, %d0
+    beq calculate_load_address /* if the major revision is 0, inodes are fixed at 128 bytes */
+
+    movew 88(%a1), %d0 /* s_inode_size */
+    swap %d0
+    clrw %d0
+    bsr reverse_word
+    lea inode_size, %a2
+    movel %d0, (%a2)
+
+calculate_load_address:
     /* calculate address to load kernel at before copying it into place */
     lea after_fill, %a3
     addl (block_size), %a3
@@ -113,8 +124,12 @@ start:
     /* check if the kernel is an ELF binary */
     movel (%a3), %d0
     cmpl #elf_magic, %d0
-    bne copy_raw_binary
+    beq load_elf
 
+    movew #bad_magic_number, %d0
+    _SysError
+
+load_elf:
     /* it is, copy its segments into their proper addresses */
     movel 24(%a3), %a0 /* save entry point address for when invoke_kernel is called later */
 
@@ -164,24 +179,7 @@ next_program_header:
     addw %d0, %a1
 2:  dbra %d1, load_program_header
 
-    /* all segments are in place, start the kernel */
-    bra invoke_kernel
-
-copy_raw_binary:
-    /* kernel isn't an ELF binary, just copy its data to a fixed address and pray it works */
-    movel #kernel_addr, %a2
-    movel %a2, %a0
-    movel (block_size), %d0
-    mulu %d0, %d4
-    lsrl #2, %d4
-
-1:  /* copy the kernel into low memory */
-    movel (%a3)+, (%a2)+
-    subql #1, %d4
-    bne 1b
-
-    bsr increment_counter
-
+    /* all segments are in place now, kernel can be started */
 invoke_kernel:
     /* add a special final state to the progress counter to show that control is leaving the bootloader, this can probably be removed to save space */
     lea counter_state, %a1
@@ -343,7 +341,7 @@ find_directory_entry:
 7:  dbra %d7, 2b
 
     /* directory entry wasn't found, give up */
-    movel #no_such_file, %d0
+    movew #no_such_file, %d0
     _SysError
 
 /* calculate the size in filesystem blocks for the given inode. address of inode is in a1, returns size in d0 */
@@ -379,7 +377,8 @@ read_inode:
     swap %d0
 
     /* index *= inode_size */
-    mulu #inode_size, %d0
+    movel (inode_size), %d1
+    mulu %d1, %d0
 
     /* calculate where the inode will be in the table */
     movel (block_size), %d1
@@ -500,16 +499,16 @@ read_block:
     movel (io_params), %a0
     movel (block_size), %d1
     mulu %d1, %d0
-    movel %d0, 0x2e(%a0) /* offset in bytes */
     movel %a1, 0x20(%a0) /* where to write the newly read data */
-    movel (block_size), 0x24(%a0) /* how much data to read */
+    movel %d1, 0x24(%a0) /* how much data to read */
+    movel %d0, 0x2e(%a0) /* offset in bytes */
     _Read
     bne 1f /* check for write errors */
 
     moveml (%a7)+, %a0/%d0-%d1
     rts
 
-1:  movel #read_error, %d0
+1:  movew #read_error, %d0
     _SysError
 
 /* https://retrocomputing.stackexchange.com/a/15365
@@ -524,15 +523,16 @@ reverse_word:
 /* assorted variables */
 io_params:          .long 0             /* address of the boot device's io parameter block */
 block_size:         .long 1024          /* filesystem block size in bytes */
+inode_size:         .long 128           /* size of inode structures in the filesystem */
 bg_table:           .long 0             /* address of the block group table */
 bg_inodes:          .long 0             /* number of inodes per block group */
 counter:            .long 0             /* address of the next byte in screen memory to fill for a basic progress indicator */
 counter_state:      .byte 0             /* the value that'll be written to the address stored in `counter` */
 
 /* names of the files that this bootloader loads */
-kernel_name:        .string "kernel"    /* filename of the kernel */
+kernel_name:        .ascii "kernel"    /* filename of the kernel */
 .equ kernel_len,    6                   /* length of the filename of the kernel */
-cmdline_name:       .string "cmdline"   /* filename of the kernel's command line arguments */
+cmdline_name:       .ascii "cmdline"   /* filename of the kernel's command line arguments */
 .equ cmdline_len,   7                   /* length of the filename of the command line arguments */
 
 end:
