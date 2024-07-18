@@ -2,10 +2,10 @@
 #  - build script to script the builds!
 
 # set this to the prefix of your toolchain. crosstool-NG tends to use the m68k-unknown-elf- prefix so it's set as default here, but not all toolchains do
-CROSS_COMPILE?=m68k-unknown-elf-
+CROSS?=m68k-unknown-elf-
 
-AS=$(CROSS_COMPILE)as
-LD=$(CROSS_COMPILE)ld
+AS=$(CROSS)as
+LD=$(CROSS)ld
 
 all: boot_block.bin installer
 .PHONY: all run clean
