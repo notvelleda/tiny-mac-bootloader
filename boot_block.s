@@ -42,17 +42,19 @@ version:    .short  0x4418  /* boot block version number */
 start:
     movel %a7, %a0
     addql #4, %a0 /* make sure this is pointing to the same io parameter block used to read this boot block */
+
     /*movew #1, 0x2c(%a0)*/ /* use offset-from-start positioning */
     /*movew (BtDskRfn), 0x18(%a0)
     movew (BootDrive), 0x16(%a0)*/
-    lea io_params, %a1
+
+    lea io_params(%pc), %a1
     movel %a0, (%a1) /* save the io block address for easy access later */
 
-    lea counter, %a1
+    lea counter(%pc), %a1
     movel (ScrnBase), (%a1)
 
     /* read the superblock */
-    lea after_fill, %a1
+    lea after_fill(%pc), %a1
     movel #1, %d0
     bsr read_block
 
@@ -68,18 +70,18 @@ correct_magic_number:
     bsr reverse_word
     movel #1024, %d1
     lsl %d0, %d1
-    lea block_size, %a2
+    lea block_size(%pc), %a2
     movel %d1, (%a2)
 
     movel 20(%a1), %d0 /* s_first_data_block */
     bsr reverse_word
     addql #1, %d0
-    lea bg_table, %a2
+    lea bg_table(%pc), %a2
     movel %d0, (%a2)
 
     movel 40(%a1), %d0 /* s_inodes_per_group */
     bsr reverse_word
-    lea bg_inodes, %a2
+    lea bg_inodes(%pc), %a2
     movel %d0, (%a2)
 
     movel 76(%a1), %d0 /* s_rev_level */
@@ -91,23 +93,23 @@ correct_magic_number:
     swap %d0
     clrw %d0
     bsr reverse_word
-    lea inode_size, %a2
+    lea inode_size(%pc), %a2
     movel %d0, (%a2)
 
 calculate_load_address:
     /* calculate address to load kernel at before copying it into place */
-    lea after_fill, %a3
-    addl (block_size), %a3
+    lea after_fill(%pc), %a3
+    addl block_size(%pc), %a3
 
     /* load the kernel's command line */
-    lea cmdline_name, %a4
+    lea cmdline_name(%pc), %a4
     movew #cmdline_len, %d7
     bsr load_file
 
     movel %a3, -(%a7)
 
     /* load the kernel */
-    lea kernel_name, %a4
+    lea kernel_name(%pc), %a4
     movew #kernel_len, %d7
     bsr load_file
 
@@ -115,7 +117,7 @@ calculate_load_address:
     movew #0x2700, %sr /* disable interrupts */
 
     /* indicate that loading from disk has finished */
-    lea counter_state, %a0
+    lea counter_state(%pc), %a0
     moveb #0xff, (%a0)
     bsr increment_counter
 
@@ -182,7 +184,7 @@ next_program_header:
     /* all segments are in place now, kernel can be started */
 invoke_kernel:
     /* add a special final state to the progress counter to show that control is leaving the bootloader, this can probably be removed to save space */
-    lea counter_state, %a1
+    lea counter_state(%pc), %a1
     moveb #0xcc, (%a1)
     bsr increment_counter
 
@@ -191,8 +193,8 @@ invoke_kernel:
     subql #4, %sp
 
     /* push address of command line arguments onto stack */
-    lea after_fill, %a1
-    addl (block_size), %a1
+    lea after_fill(%pc), %a1
+    addl block_size(%pc), %a1
     movel %a1, -(%sp)
 
     jsr (%a0)
@@ -204,14 +206,14 @@ halt:
 increment_counter:
     moveml %a0/%d0, -(%a7)
 
-    movel (counter), %d0
+    movel counter(%pc), %d0
 
     movel %d0, %a0
-    moveb (counter_state), (%a0)
+    moveb counter_state(%pc), (%a0)
 
     addql #1, %d0
 
-    lea counter, %a0
+    lea counter(%pc), %a0
     movel %d0, (%a0)
 
     moveml (%a7)+, %a0/%d0
@@ -225,19 +227,19 @@ load_file:
     movel %a3, -(%a7) /* save load address */
 
     /* read the inode for the root directory */
-    lea after_fill, %a1
+    lea after_fill(%pc), %a1
     movel #2, %d0
     bsr read_inode
 
     /* find the inode for the file */
     movel %a1, %a5
-    addl (block_size), %a5
+    addl block_size(%pc), %a5
     movel %a1, %a3
     movel %d7, %d3
     bsr find_directory_entry
 
     /* read the file inode */
-    lea after_fill, %a1
+    lea after_fill(%pc), %a1
     bsr read_inode
 
     /* calculate its size in filesystem blocks */
@@ -264,7 +266,7 @@ load_file:
     bsr increment_counter
 
     addql #1, %d4
-    addl (block_size), %a3
+    addl block_size(%pc), %a3
 3:  dbra %d5, 2b
 
     /* add null terminator */
@@ -333,7 +335,7 @@ find_directory_entry:
     addl %d4, %d1 /* increment the directory entry address and counter */
     addl %d4, %a6
 
-    cmpl (block_size), %d1 /* loop if there are more directory entries in this block */
+    cmpl block_size(%pc), %d1 /* loop if there are more directory entries in this block */
     bcs 3b
 
     /* couldn't find any matching entries in this block */
@@ -350,7 +352,7 @@ get_inode_block_size:
 
     movel 4(%a1), %d0 /* i_size */
     bsr reverse_word
-    movel (block_size), %d1
+    movel block_size(%pc), %d1
     addl %d1, %d0
     subql #1, %d0 /* add block_size - 1 to the size field so that it'll round up */
     divu %d1, %d0
@@ -368,7 +370,7 @@ read_inode:
     /* inode -= 1 */
     subql #1, %d0
 
-    movel (bg_inodes), %d1
+    movel bg_inodes(%pc), %d1
     divu %d1, %d0
     /* block_group (d5) = inode / bg_inodes */
     movew %d0, %d5
@@ -377,11 +379,11 @@ read_inode:
     swap %d0
 
     /* index *= inode_size */
-    movel (inode_size), %d1
+    movel inode_size(%pc), %d1
     mulu %d1, %d0
 
     /* calculate where the inode will be in the table */
-    movel (block_size), %d1
+    movel block_size(%pc), %d1
     divu %d1, %d0
     /* containing_block (d3) = index / block_size */
     movew %d0, %d3
@@ -394,11 +396,11 @@ read_inode:
     mulu #block_group_size, %d5
 
     /* calculate where the block group will be in the table */
-    movel (block_size), %d1
+    movel block_size(%pc), %d1
     divu %d1, %d5
     /* containing_block (d6) = index / block_size */
     movew %d5, %d6
-    addl (bg_table), %d6
+    addl bg_table(%pc), %d6
     /* offset (d5) = index % block_size */
     clrw %d5
     swap %d5
@@ -424,7 +426,7 @@ read_inode:
 
 /* clears a block of memory. clobbers d0, a1, address to clear at is in a1 */
 clear_block:
-    movel (block_size), %d0
+    movel block_size(%pc), %d0
     bra 2f
 1:  clrb (%a1)+
 2:  dbra %d0, 1b
@@ -443,7 +445,7 @@ read_inode_block:
     subl #12, %d0 /* subtract the initial 12 blocks count from the index */
     movel %d0, %d2 /* save block index */
 
-    movel (block_size), %d1
+    movel block_size(%pc), %d1
     lsrl #2, %d1 /* divide block size by 4 to get the number of 32 bit indices in indirect arrays */
 
     /* check if this block is single or double indirect */
@@ -496,8 +498,8 @@ read_direct_block:
 read_block:
     moveml %a0/%d0-%d1, -(%a7) /* save clobbered registers */
 
-    movel (io_params), %a0
-    movel (block_size), %d1
+    movel io_params(%pc), %a0
+    movel block_size(%pc), %d1
     mulu %d1, %d0
     movel %a1, 0x20(%a0) /* where to write the newly read data */
     movel %d1, 0x24(%a0) /* how much data to read */
@@ -530,9 +532,9 @@ counter:            .long 0             /* address of the next byte in screen me
 counter_state:      .byte 0             /* the value that'll be written to the address stored in `counter` */
 
 /* names of the files that this bootloader loads */
-kernel_name:        .ascii "kernel"    /* filename of the kernel */
+kernel_name:        .ascii "kernel"     /* filename of the kernel */
 .equ kernel_len,    6                   /* length of the filename of the kernel */
-cmdline_name:       .ascii "cmdline"   /* filename of the kernel's command line arguments */
+cmdline_name:       .ascii "cmdline"    /* filename of the kernel's command line arguments */
 .equ cmdline_len,   7                   /* length of the filename of the command line arguments */
 
 end:
