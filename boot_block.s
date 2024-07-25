@@ -10,11 +10,15 @@
 .equ BtDskRfn, 0x0b34*/
 .equ ScrnBase, 0x0824
 .equ MemTop, 0x0108
+.equ ROMBase, 0x02ae
 .macro _SysError
     .short 0xa9c9
 .endm
 .macro _Read
     .short 0xa002
+.endm
+.macro _HideCursor
+    .short 0xa852
 .endm
 
 .equ block_group_size, 32
@@ -33,15 +37,23 @@
 .globl begin
 begin:
 
-id:         .short  0x4c4b  /* boot block signature */
+id:         .ascii  "LK"    /* boot block signature */
 entry:      bra     start   /* entry point, the Mac ROM jumps here when the boot block has been loaded */
-version:    .short  0x4418  /* boot block version number */
+version:    .short  0x4418  /* boot block version number, only the high byte of this matters */
 /* everything else doesn't seem to be required so it isn't here :3 */
 
 /* the actual entry point */
 start:
     movel %a7, %a0
-    addql #4, %a0 /* make sure this is pointing to the same io parameter block used to read this boot block */
+
+    /* since the stack layout in the 64 KB ROM used in the Mac 128K/512K and the later 128 KB ROM used in the 512Ke/Plus/etc. is different,
+     * the version number of the ROM needs to be checked */
+    movel ROMBase, %a1 /* get the base address of the ROM since it may not be consistent */
+    moveb 9(%a1), %d0 /* the ROM version number is the 9th byte in ROM */
+    cmpb #0x69, %d0
+    ble 1f /* if the ROM version is 0x69 (the 64 KB ROM's version) or less, a0 already points to the io parameter block and thus does not need to be modified */
+    addql #4, %a0 /* add 4 to a0 so that it points to the same io parameter block used to read this boot block */
+1:
 
     /*movew #1, 0x2c(%a0)*/ /* use offset-from-start positioning */
     /*movew (BtDskRfn), 0x18(%a0)
@@ -113,7 +125,7 @@ calculate_load_address:
     movew #kernel_len, %d7
     bsr load_file
 
-    jsr 0x401ca8 /* hide cursor */
+    _HideCursor
     movew #0x2700, %sr /* disable interrupts */
 
     /* indicate that loading from disk has finished */
