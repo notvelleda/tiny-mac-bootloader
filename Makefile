@@ -7,6 +7,8 @@ CROSS?=m68k-unknown-elf-
 AS=$(CROSS)as
 LD=$(CROSS)ld
 
+FLOPPY_IMAGE_SIZE?=800k
+
 all: boot_block.bin installer
 .PHONY: all run clean
 
@@ -22,7 +24,7 @@ boot_block.bin: boot_block.o boot_block.ld
 floppy.img: boot_block.bin
 	-rm filesystem.img
 	mkdir -p fs-contents
-	mke2fs -t ext3 -d fs-contents filesystem.img 800k
+	mke2fs -t ext3 -d fs-contents filesystem.img $(FLOPPY_IMAGE_SIZE)
 	cat boot_block.bin | head -c 1024 > floppy.img
 	cat filesystem.img | tail -c +1025 >> floppy.img
 
