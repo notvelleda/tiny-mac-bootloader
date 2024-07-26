@@ -202,7 +202,6 @@ invoke_kernel:
 
     /* move stack pointer to top of ram */
     movel (MemTop), %sp
-    subql #4, %sp
 
     /* push address of command line arguments onto stack */
     lea after_fill(%pc), %a1
