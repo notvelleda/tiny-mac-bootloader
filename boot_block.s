@@ -9,6 +9,7 @@
 /*.equ BootDrive, 0x0210
 .equ BtDskRfn, 0x0b34*/
 .equ ScrnBase, 0x0824
+.equ JScrnSize, 0x0810
 .equ MemTop, 0x0108
 .equ ROMBase, 0x02ae
 .macro _SysError
@@ -61,6 +62,12 @@ start:
 
     lea io_params(%pc), %a1
     movel %a0, (%a1) /* save the io block address for easy access later */
+
+    /* get the size of the screen before things get overwritten by loaded data */
+    pea screen_width(%pc)
+    pea screen_height(%pc)
+    movel (JScrnSize), %a0
+    jsr (%a0)
 
     lea counter(%pc), %a1
     movel (ScrnBase), (%a1)
@@ -201,12 +208,18 @@ invoke_kernel:
     bsr increment_counter
 
     /* move stack pointer to top of ram */
-    movel (MemTop), %sp
+    movel (MemTop), %a7
 
     /* push address of command line arguments onto stack */
     lea after_fill(%pc), %a1
     addl block_size(%pc), %a1
-    movel %a1, -(%sp)
+    movel %a1, -(%a7)
+
+    /* push screen size onto stack */
+    movew screen_height(%pc), -(%a7)
+    clrw -(%a7)
+    movew screen_width(%pc), -(%a7)
+    clrw -(%a7)
 
     jsr (%a0)
 
@@ -539,6 +552,8 @@ block_size:         .long 1024          /* filesystem block size in bytes */
 inode_size:         .long 128           /* size of inode structures in the filesystem */
 bg_table:           .long 0             /* address of the block group table */
 bg_inodes:          .long 0             /* number of inodes per block group */
+screen_width:       .short 0            /* the width of the screen, in pixels */
+screen_height:      .short 0            /* the height of the screen, in pixels */
 counter:            .long 0             /* address of the next byte in screen memory to fill for a basic progress indicator */
 counter_state:      .byte 0             /* the value that'll be written to the address stored in `counter` */
 

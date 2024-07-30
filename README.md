@@ -101,7 +101,12 @@ If a Sad Mac screen is shown but its error code doesn't match one of the ones in
 ### ABI
 
 The interface that tiny-mac-bootloader provides to kernels is quite simple: When the kernel starts execution, the stack pointer will be located close to the end of RAM,
-and the kernel's entry point will be called with the pointer to the arguments loaded from the arguments file as an argument in accordance with the 68k C ABI.
+and the kernel's entry point will be called with arguments in accordance with the 68k C ABI.
+
+The kernel's entry point is expected to have a function signature like the following:
+```c
+void _start(uint32_t screen_width, uint32_t screen_height, const char *arguments);
+```
 
 Additionally, interrupts will be disabled and the cursor will be hidden at the time the kernel is started.
 
